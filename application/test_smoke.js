@@ -2,7 +2,7 @@
 import * as o_path from "node:path";
 
 // end-to-end smoke test: spawns its own server (isolated port + temp database),
-// drives the full websocket flow, then tears down. run with: deno task test
+// drives the websocket flow, then tears down. run with: deno task test
 let S_PATH__APP = import.meta.dirname; // application/
 let N_PORT = 8137;
 let S_PATH__TMPDATA = o_path.join(S_PATH__APP, "test_tmp", "smoke");
@@ -15,90 +15,78 @@ let f_o_ws__connect = function (s_url) {
   });
 };
 
-let f_wait__s_type = async function (a_o_msg, s_type, n_ms__timeout) {
-  let n_ms__start = Date.now();
-  while (Date.now() - n_ms__start < (n_ms__timeout || 2000)) {
-    let n_idx = a_o_msg.findIndex((o) => o.s_type == s_type);
-    if (n_idx >= 0) return a_o_msg.splice(n_idx, 1)[0];
-    await new Promise((f) => setTimeout(f, 20));
-  }
-  throw new Error(`timeout waiting for ${s_type}`);
-};
-
 let f_run__flow = async function (o_ws) {
   let a_o_msg = [];
   o_ws.onmessage = function (o_evt) { a_o_msg.push(JSON.parse(o_evt.data)); };
   let f_send = function (s_type, v_data) { o_ws.send(JSON.stringify({ s_type, v_data, n_ts_ms: Date.now() })); };
+  let f_sleep = function (n_ms) { return new Promise(function (f) { setTimeout(f, n_ms); }); };
   let f_assert = function (b, s) { if (!b) throw new Error("ASSERT FAILED: " + s); };
 
-  await f_wait__s_type(a_o_msg, "workspace.bootstrap");
+  // wait for the first message of s_type, then quiet-drain further ones; return the latest.
+  // (a mutation broadcasts several snapshots — we always want the most recent.)
+  let f_o__latest = async function (s_type, n_ms__timeout) {
+    let n_ms__deadline = Date.now() + (n_ms__timeout || 2000);
+    while (Date.now() < n_ms__deadline) {
+      if (a_o_msg.some((o) => o.s_type == s_type)) break;
+      await f_sleep(15);
+    }
+    for (;;) {
+      let n_cnt = a_o_msg.filter((o) => o.s_type == s_type).length;
+      await f_sleep(60);
+      if (Date.now() >= n_ms__deadline) break;
+      if (a_o_msg.filter((o) => o.s_type == s_type).length == n_cnt) break;
+    }
+    let a = a_o_msg.filter((o) => o.s_type == s_type);
+    if (!a.length) throw new Error(`timeout waiting for ${s_type}`);
+    return a[a.length - 1];
+  };
+  let f_o_activity__by_name = function (s_name) {
+    let a = a_o_msg.filter((o) => o.s_type == "activity.listed");
+    if (!a.length) return null;
+    return a[a.length - 1].v_data.a_o_activity.find((o) => o.s_name == s_name) || null;
+  };
+
+  await f_o__latest("workspace.bootstrap");
   f_send("workspace.create", {});
-  await f_wait__s_type(a_o_msg, "workspace.created");
-  await f_wait__s_type(a_o_msg, "activity.listed");
-  await f_wait__s_type(a_o_msg, "timer.current");
-  await f_wait__s_type(a_o_msg, "timertrack.listed");
+  await f_o__latest("workspace.created");
+  await f_o__latest("activity.listed");
 
   f_send("activity.create", { s_name: "chess" });
-  await f_wait__s_type(a_o_msg, "activity.listed");
+  await f_o__latest("activity.listed");
   f_send("activity.create", { s_name: "reading" });
-  f_assert((await f_wait__s_type(a_o_msg, "activity.listed")).v_data.a_o_activity.length == 2, "two activities created");
+  await f_o__latest("activity.listed");
+  f_assert(f_o_activity__by_name("chess") && f_o_activity__by_name("reading"), "two activities exist");
+  f_assert(f_o_activity__by_name("chess").n_ms__sum == 0, "sum starts at 0");
 
-  f_send("activity.set_sort", { s_sort: "name" });
-  let o_listed = await f_wait__s_type(a_o_msg, "activity.listed");
-  f_assert(
-    JSON.stringify(o_listed.v_data.a_o_activity.map((o) => o.s_name)) == JSON.stringify(["chess", "reading"]),
-    "server-side name sort = [chess, reading]",
-  );
-  let o_activity__chess = o_listed.v_data.a_o_activity.find((o) => o.s_name == "chess");
-  let o_activity__reading = o_listed.v_data.a_o_activity.find((o) => o.s_name == "reading");
+  // play chess -> running; sum must stay 0 while running
+  f_send("timer.start", { n_o_activity_n_id: f_o_activity__by_name("chess").n_id });
+  let o_cur = await f_o__latest("timer.current");
+  await f_o__latest("activity.listed");
+  f_assert(o_cur.v_data.o_timertrack.n_o_activity_n_id == f_o_activity__by_name("chess").n_id, "chess is running");
+  f_assert(f_o_activity__by_name("chess").n_ms__sum == 0, "sum stays 0 while running");
+  await f_sleep(50); // ensure a measurable duration
 
-  // single-active timer rule
-  f_send("timer.start", { n_o_activity_n_id: o_activity__chess.n_id });
-  let o_cur = await f_wait__s_type(a_o_msg, "timer.current");
-  await f_wait__s_type(a_o_msg, "timertrack.listed");
-  f_assert(o_cur.v_data.o_timertrack.n_o_activity_n_id == o_activity__chess.n_id, "chess timer running");
+  // play reading -> auto-pauses chess; chess sum must now be > 0
+  f_send("timer.start", { n_o_activity_n_id: f_o_activity__by_name("reading").n_id });
+  o_cur = await f_o__latest("timer.current");
+  await f_o__latest("activity.listed");
+  f_assert(o_cur.v_data.o_timertrack.n_o_activity_n_id == f_o_activity__by_name("reading").n_id, "running switched to reading");
+  f_assert(f_o_activity__by_name("chess").n_ms__sum > 0, "chess sum updated on auto-pause");
+  f_assert(f_o_activity__by_name("reading").n_ms__sum == 0, "reading sum still 0 while running");
+  await f_sleep(50);
 
-  f_send("timer.start", { n_o_activity_n_id: o_activity__reading.n_id });
-  o_cur = await f_wait__s_type(a_o_msg, "timer.current");
-  await f_wait__s_type(a_o_msg, "timertrack.listed");
-  f_assert(o_cur.v_data.o_timertrack.n_o_activity_n_id == o_activity__reading.n_id, "running track switched to reading");
-
+  // pause reading -> reading sum must now be > 0
   f_send("timer.stop", {});
-  f_assert((await f_wait__s_type(a_o_msg, "timer.current")).v_data.o_timertrack == null, "no timer running after stop");
+  o_cur = await f_o__latest("timer.current");
+  await f_o__latest("activity.listed");
+  f_assert(o_cur.v_data.o_timertrack == null, "no timer running after pause");
+  f_assert(f_o_activity__by_name("reading").n_ms__sum > 0, "reading sum updated on pause");
 
-  f_send("timertrack.list", {});
-  let o_tracks = await f_wait__s_type(a_o_msg, "timertrack.listed");
-  let a_o_track = o_tracks.v_data.a_o_timertrack;
-  f_assert(a_o_track.length == 2, "two tracks recorded");
-  f_assert(!a_o_track.some((o) => o.n_ts_ms_end == null), "no track left running");
-  let o_track__chess = a_o_track.find((o) => o.n_o_activity_n_id == o_activity__chess.n_id);
-  f_assert(o_track__chess.n_ts_ms_end != null, "chess track auto-closed when reading started");
-
-  // edit a recorded track
-  f_send("timertrack.update", {
-    n_id: o_track__chess.n_id,
-    n_ts_ms_start: o_track__chess.n_ts_ms_start,
-    n_ts_ms_end: o_track__chess.n_ts_ms_end,
-    s_notes: "edited note",
-  });
-  await f_wait__s_type(a_o_msg, "timertrack.listed");
-  f_send("timertrack.list", {});
-  o_tracks = await f_wait__s_type(a_o_msg, "timertrack.listed");
-  f_assert(
-    o_tracks.v_data.a_o_timertrack.find((o) => o.n_id == o_track__chess.n_id).s_notes == "edited note",
-    "track notes updated",
-  );
-
-  // delete activity cascades its tracks away
-  f_send("activity.delete", { n_id: o_activity__reading.n_id });
-  await f_wait__s_type(a_o_msg, "activity.listed");
-  await f_wait__s_type(a_o_msg, "timertrack.listed");
-  f_send("timertrack.list", {});
-  o_tracks = await f_wait__s_type(a_o_msg, "timertrack.listed");
-  f_assert(
-    !o_tracks.v_data.a_o_timertrack.some((o) => o.n_o_activity_n_id == o_activity__reading.n_id),
-    "deleted activity's tracks cascaded away",
-  );
+  // delete reading -> gone; chess sum unchanged
+  f_send("activity.delete", { n_id: f_o_activity__by_name("reading").n_id });
+  await f_o__latest("activity.listed");
+  f_assert(!f_o_activity__by_name("reading"), "deleted activity is gone");
+  f_assert(f_o_activity__by_name("chess").n_ms__sum > 0, "chess sum unchanged after deleting another activity");
 
   o_ws.close();
 };

@@ -7,7 +7,7 @@ import * as o_repo__timertrack from "./repo/o_timertrack.js";
 import * as o_repo__key_val from "./repo/o_key_val.js";
 
 let S_KEY__SORT = "activity.sort";
-let S_SORT__DEFAULT = "last_tracked";
+let S_SORT__DEFAULT = "created";
 
 // ---- snapshot builders: the server is the single source of truth -------------
 let f_o_msg__activity_listed = function (n_id__workspace) {
@@ -74,18 +74,22 @@ let f_route__msg = function (o_ws, o_msg) {
       break;
 
     case "timer.start": {
-      // single active timer per workspace: close any running track, then open a new one
+      // single active timer per workspace: close any running track, then open a new one.
+      // the auto-closed track now counts toward its activity's sum -> refresh the list
       let n_ms__now = Date.now();
       o_repo__timertrack.f_stop__running(n_id__workspace, n_ms__now);
       o_repo__timertrack.f_o_timertrack__create(n_id__workspace, v_data.n_o_activity_n_id, n_ms__now);
       f_broadcast__workspace(n_id__workspace, f_o_msg__timer_current(n_id__workspace));
+      f_broadcast__workspace(n_id__workspace, f_o_msg__activity_listed(n_id__workspace));
       f_broadcast__workspace(n_id__workspace, f_o_msg__timertrack_listed(n_id__workspace));
       break;
     }
     case "timer.stop": {
+      // closing the running track updates its activity's sum -> refresh the list
       let n_ms__now = Date.now();
       o_repo__timertrack.f_stop__running(n_id__workspace, n_ms__now);
       f_broadcast__workspace(n_id__workspace, f_o_msg__timer_current(n_id__workspace));
+      f_broadcast__workspace(n_id__workspace, f_o_msg__activity_listed(n_id__workspace));
       f_broadcast__workspace(n_id__workspace, f_o_msg__timertrack_listed(n_id__workspace));
       break;
     }
@@ -103,10 +107,12 @@ let f_route__msg = function (o_ws, o_msg) {
         v_data.n_ts_ms_end,
         v_data.s_notes,
       );
+      f_broadcast__workspace(n_id__workspace, f_o_msg__activity_listed(n_id__workspace));
       f_broadcast__workspace(n_id__workspace, f_o_msg__timertrack_listed(n_id__workspace));
       break;
     case "timertrack.delete":
       o_repo__timertrack.f_o_timertrack__delete(v_data.n_id);
+      f_broadcast__workspace(n_id__workspace, f_o_msg__activity_listed(n_id__workspace));
       f_broadcast__workspace(n_id__workspace, f_o_msg__timertrack_listed(n_id__workspace));
       break;
 

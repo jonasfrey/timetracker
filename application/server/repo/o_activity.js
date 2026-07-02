@@ -29,29 +29,35 @@ let f_o_activity__delete = function (n_id) {
   o_db.prepare("DELETE FROM o_activity WHERE n_id = ?").run(n_id);
 };
 
-// server-side sorting (browser is a pure renderer): "name" | "last_tracked"
+// server-side sorting + per-activity completed-time sum (browser is a pure renderer).
+// n_ms__sum counts only closed tracks (n_ts_ms_end not null) — the running track is
+// excluded, so the sum visibly updates only when tracking is paused/stopped.
+// s_sort: "created" (insertion order, default) | "name" | "last_tracked"
 let f_a_o_activity__by_workspace = function (n_o_workspace_n_id, s_sort) {
   let o_db = f_o_db();
-  let a_o_activity;
+  let s_order;
   if (s_sort == "name") {
-    a_o_activity = o_db
-      .prepare("SELECT * FROM o_activity WHERE n_o_workspace_n_id = ? ORDER BY s_name COLLATE NOCASE ASC")
-      .all(n_o_workspace_n_id);
+    s_order = "s_name COLLATE NOCASE ASC";
+  } else if (s_sort == "last_tracked") {
+    s_order = "(n_ts_ms__last IS NULL), n_ts_ms__last DESC, n_ts_ms__created DESC";
   } else {
-    // last_tracked: most recent timertrack start first; never-tracked fall back to created time
-    a_o_activity = o_db
-      .prepare(
-        `SELECT o_activity.*,
-           (SELECT MAX(o_timertrack.n_ts_ms_start)
-              FROM o_timertrack
-             WHERE o_timertrack.n_o_activity_n_id = o_activity.n_id) AS n_ts_ms__last
-           FROM o_activity
-          WHERE o_activity.n_o_workspace_n_id = ?
-          ORDER BY (n_ts_ms__last IS NULL), n_ts_ms__last DESC, o_activity.n_ts_ms__created DESC`,
-      )
-      .all(n_o_workspace_n_id);
+    s_order = "n_ts_ms__created ASC";
   }
-  return a_o_activity;
+  return o_db
+    .prepare(
+      `SELECT o_activity.*,
+         COALESCE((SELECT SUM(o_timertrack.n_ts_ms_end - o_timertrack.n_ts_ms_start)
+                     FROM o_timertrack
+                    WHERE o_timertrack.n_o_activity_n_id = o_activity.n_id
+                      AND o_timertrack.n_ts_ms_end IS NOT NULL), 0) AS n_ms__sum,
+         (SELECT MAX(o_timertrack.n_ts_ms_start)
+            FROM o_timertrack
+           WHERE o_timertrack.n_o_activity_n_id = o_activity.n_id) AS n_ts_ms__last
+         FROM o_activity
+        WHERE o_activity.n_o_workspace_n_id = ?
+        ORDER BY ${s_order}`,
+    )
+    .all(n_o_workspace_n_id);
 };
 
 export { f_o_activity__create, f_o_activity__update, f_o_activity__delete, f_a_o_activity__by_workspace, f_o_activity__by_n_id };
