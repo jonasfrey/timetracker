@@ -1,0 +1,5 @@
+data/
+test_tmp/
+*-wal
+*-shm
+.Deno_Cache

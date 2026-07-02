@@ -1,0 +1,18 @@
+// Copyright (C) 2026 Jonas Immanuel Frey - Licensed under MIT. See LICENSE file for details
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-read=. --allow-write=data/ --watch server/main.js",
+    "start_prod": "deno run --allow-net --allow-read=. --allow-write=data/ server/main.js",
+    "rmdb": "deno run --allow-read=. --allow-write=data/ server/rmdb.js",
+    "test": "deno test --allow-net --allow-read=. --allow-write=test_tmp --allow-run=deno test_smoke.js"
+  },
+  "compilerOptions": { "checkJs": false },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "prefer-const",
+        "no-empty"
+      ]
+    }
+  }
+}

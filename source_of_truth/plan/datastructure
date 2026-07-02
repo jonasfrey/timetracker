@@ -1,0 +1,31 @@
+
+default properties 
+n_id (default id)
+n_[foreignmodel]_n_id
+n_ts_ms__created (ts = timestamp , ms = milliseconds)
+n_ts_ms__updated
+
+
+# data entities
+
+o_workspace
+s_uuid
+
+
+
+o_activity
+s_name
+
+
+
+o_timertrack
+n_ts_ms_start
+n_ts_ms_end
+n_o_activity_n_id
+s_notes
+
+
+
+
+
+o_key_val (general settings table)

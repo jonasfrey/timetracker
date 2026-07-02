@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Copyright (C) 2026 Jonas Immanuel Frey - Licensed under MIT. See LICENSE file for details -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Time Tracker</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1115;
+        --panel: #171a21;
+        --panel-2: #1f242d;
+        --line: #2b313c;
+        --text: #e6e9ef;
+        --muted: #8b93a1;
+        --accent: #6ea8fe;
+        --danger: #ff6b6b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .topbar {
+        display: flex;
+        align-items: baseline;
+        gap: 1rem;
+        padding: 0.75rem 1.25rem;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+      }
+      .topbar h1 { font-size: 1.1rem; margin: 0; }
+      .topbar .s_uuid { color: var(--muted); font-size: 0.8rem; font-family: ui-monospace, monospace; }
+      .topbar .s_status { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+      .content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        padding: 1rem;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1rem;
+      }
+      .panel--wide { grid-column: 1 / -1; }
+      .panel h2 { margin: 0 0 0.75rem; font-size: 0.95rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+      .row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; flex-wrap: wrap; }
+      input, select, button {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0.4rem 0.55rem;
+        font-size: 0.9rem;
+      }
+      input[type="text"] { flex: 1; min-width: 8rem; }
+      button { cursor: pointer; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      button.btn--danger { color: var(--danger); }
+      .elapsed {
+        font-size: 2.4rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        font-family: ui-monospace, monospace;
+        letter-spacing: 0.02em;
+      }
+      .nowtracking { color: var(--muted); margin: 0.25rem 0 0.75rem; }
+      .idle { color: var(--muted); padding: 0.5rem 0; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      ul li {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+        padding: 0.35rem 0;
+        border-bottom: 1px solid var(--line);
+      }
+      ul li:last-child { border-bottom: none; }
+      ul li span { flex: 1; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+      th { text-align: left; color: var(--muted); font-weight: 600; padding: 0.3rem; }
+      td { padding: 0.3rem; border-top: 1px solid var(--line); vertical-align: middle; }
+      td input { padding: 0.25rem 0.35rem; width: 100%; }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/client/main.js"></script>
+  </body>
+</html>
