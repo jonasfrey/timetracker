@@ -3,7 +3,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- mobile-first: portrait phones. viewport-fit=cover reaches into notches; initial-scale=1
+         avoids the 300ms tap delay. input font-size is 16px to stop iOS focus-zoom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1115" />
     <title>Time Tracker</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
@@ -18,109 +21,171 @@
         --accent: #6ea8fe;
         --green: #7fd1a0;
         --danger: #ff6b6b;
+        --n_sz__tap: 2.75rem; /* ~44px minimum touch target */
       }
       * { box-sizing: border-box; }
+      html, body { height: 100%; }
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        height: 100vh;
+        height: 100dvh; /* dynamic viewport height: respects mobile browser chrome */
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         background: var(--bg);
         color: var(--text);
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none; /* no pull-to-refresh / scroll chaining */
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      input { -webkit-user-select: text; user-select: text; }
+
+      /* app shell: fixed header, scrolling list — feels native on a phone */
+      .app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        max-width: 640px;
+        margin: 0 auto;
       }
       .topbar {
+        flex: 0 0 auto;
         display: flex;
-        align-items: baseline;
-        gap: 0.75rem;
-        padding: 0.75rem 1.25rem;
+        align-items: center;
+        gap: 0.6rem;
+        padding: calc(env(safe-area-inset-top, 0px) + 0.65rem) 1rem 0.65rem;
         background: var(--panel);
         border-bottom: 1px solid var(--line);
       }
-      .topbar h1 { font-size: 1.05rem; margin: 0; }
-      .topbar .s_uuid { color: var(--muted); font-size: 0.78rem; font-family: ui-monospace, monospace; }
-      .topbar .s_status { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+      .topbar h1 { font-size: 1rem; margin: 0; white-space: nowrap; }
+      .topbar .s_uuid {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-family: ui-monospace, monospace;
+      }
+      .topbar .s_status { flex: 0 0 auto; color: var(--muted); font-size: 0.74rem; }
+      .topbar .s_status::before {
+        content: "●";
+        color: var(--green);
+        margin-right: 0.3rem;
+      }
 
       .content {
-        max-width: 540px;
-        margin: 2rem auto;
-        padding: 0 1rem;
+        flex: 1 1 auto;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem);
       }
-      .row-add {
+
+      /* sticky add bar stays reachable while the list scrolls */
+      .simple .row-add {
+        position: sticky;
+        top: 0;
+        z-index: 2;
         display: flex;
         gap: 0.5rem;
-        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.25);
       }
-      .row-add input {
+      .simple .row-add input {
         flex: 1;
+        min-width: 0;
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 0.6rem 0.75rem;
+        border-radius: 0.6rem;
+        padding: 0.75rem 0.85rem;
         color: var(--text);
-        font-size: 0.95rem;
+        font-size: 16px; /* prevents iOS auto-zoom on focus */
       }
-      .row-add button {
+      .simple .row-add button {
+        flex: 0 0 auto;
+        min-height: var(--n_sz__tap);
+        min-width: var(--n_sz__tap);
+        padding: 0 1.1rem;
         background: var(--accent);
         color: #0f1115;
         border: none;
-        border-radius: 8px;
-        padding: 0 1rem;
+        border-radius: 0.6rem;
+        font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
+        touch-action: manipulation;
       }
 
       ul { list-style: none; margin: 0; padding: 0; }
       .row {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.6rem 0.5rem;
+        gap: 0.8rem;
+        padding: 0.7rem 1rem;
         border-bottom: 1px solid var(--line);
       }
-      .row--running { background: rgba(127, 209, 160, 0.08); border-radius: 8px; }
+      .row--running {
+        background: rgba(127, 209, 160, 0.10);
+        box-shadow: inset 0.2rem 0 0 var(--green);
+      }
 
       .btn-play {
-        width: 2.1rem;
-        height: 2.1rem;
         flex: 0 0 auto;
+        width: var(--n_sz__tap);
+        height: var(--n_sz__tap);
         border: none;
         border-radius: 50%;
         background: var(--panel-2);
         color: var(--accent);
-        font-size: 0.95rem;
+        font-size: 1rem;
         cursor: pointer;
         display: grid;
         place-items: center;
+        touch-action: manipulation;
       }
       .row--running .btn-play { background: var(--green); color: #0f1115; }
 
-      .info { flex: 1; min-width: 0; }
-      .name { font-size: 1rem; }
+      .info { flex: 1 1 auto; min-width: 0; }
+      .name {
+        font-size: 1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .current {
         color: var(--green);
-        font-size: 0.82rem;
+        font-size: 0.8rem;
         font-variant-numeric: tabular-nums;
         font-family: ui-monospace, monospace;
-        margin-top: 0.1rem;
+        margin-top: 0.15rem;
       }
 
       .sum {
+        flex: 0 0 auto;
         font-variant-numeric: tabular-nums;
         font-family: ui-monospace, monospace;
         color: var(--muted);
         font-size: 0.95rem;
       }
 
+      /* always visible on touch (no hover dependency) */
       .btn-del {
+        flex: 0 0 auto;
+        width: var(--n_sz__tap);
+        height: var(--n_sz__tap);
         background: none;
         border: none;
         color: var(--muted);
         cursor: pointer;
-        font-size: 0.9rem;
-        padding: 0.25rem 0.4rem;
-        opacity: 0.5;
+        font-size: 0.95rem;
+        touch-action: manipulation;
       }
-      .btn-del:hover { opacity: 1; color: var(--danger); }
+      .btn-del:active { color: var(--danger); }
 
-      .empty { color: var(--muted); padding: 1rem 0.5rem; }
+      .empty { color: var(--muted); padding: 1.5rem 1rem; }
     </style>
   </head>
   <body>
